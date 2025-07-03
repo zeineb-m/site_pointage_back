@@ -1,5 +1,5 @@
 package com.example.stage.Model;
 
 public enum Role {
-    ADMIN, Employee,HR,Site_Supervisor
+    ADMIN, EMPLOYEE,HR,SITE_SUPERVISOR
 }

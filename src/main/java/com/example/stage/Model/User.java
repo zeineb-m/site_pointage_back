@@ -13,16 +13,19 @@ public class User {
     private String password;
     private Role role;
     private String photo;
-
+    private String supervisorId;
+    private String photoHash;
     public User() {}
 
-    public User(String id, String username, String email, String password, Role role, String photo) {
+    public User(String id, String username, String email, String password, Role role, String photo, String supervisorId, String photoHash) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
         this.role = role;
         this.photo = photo;
+        this.supervisorId = supervisorId;
+        this.photoHash = photoHash;
     }
 
     // Getters et Setters
@@ -62,5 +65,19 @@ public class User {
     }
     public void setPhoto(String photo) {
         this.photo = photo;
+    }
+
+    public String getSupervisorId() {
+        return supervisorId;
+    }
+
+    public void setSupervisorId(String supervisorId) {
+        this.supervisorId = supervisorId;
+    }
+    public String getPhotoHash() {
+        return photoHash;
+    }
+    public void setPhotoHash(String photoHash) {
+        this.photoHash = photoHash;
     }
 }
