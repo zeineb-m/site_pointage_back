@@ -1,5 +1,6 @@
 package com.example.stage.Model;
 
+import org.bson.types.Binary;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -12,12 +13,14 @@ public class User {
     private String email;
     private String password;
     private Role role;
-    private String photo;
+    private byte[]  photo;
     private String supervisorId;
     private String photoHash;
+    private String phone;
+    private String address;
     public User() {}
 
-    public User(String id, String username, String email, String password, Role role, String photo, String supervisorId, String photoHash) {
+    public User(String id, String username, String email, String password, Role role, byte[]  photo, String supervisorId, String photoHash, String phone, String address) {
         this.id = id;
         this.username = username;
         this.email = email;
@@ -26,9 +29,24 @@ public class User {
         this.photo = photo;
         this.supervisorId = supervisorId;
         this.photoHash = photoHash;
+        this.phone = phone;
+        this.address = address;
+    }
+    public String getPhone() {
+        return phone;
     }
 
-    // Getters et Setters
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
 
     public String getId() {
         return id;
@@ -60,10 +78,10 @@ public class User {
     public void setRole(Role role) {
         this.role = role;
     }
-    public String getPhoto() {
+    public byte[]  getPhoto() {
         return photo;
     }
-    public void setPhoto(String photo) {
+    public void setPhoto(byte[]  photo) {
         this.photo = photo;
     }
 

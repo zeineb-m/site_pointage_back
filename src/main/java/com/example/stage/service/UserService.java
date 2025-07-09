@@ -9,6 +9,6 @@ public interface UserService {
     User getUserById(String id);
     void deleteUser(String id);
     User updateUser(User user);
-
+    User getUserByEmail(String email);
     User authenticate(String email, String password);
 }
