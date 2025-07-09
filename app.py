@@ -11,6 +11,7 @@ from pymongo import MongoClient
 from bson.binary import Binary
 import logging
 from datetime import datetime, date
+from bson.objectid import ObjectId 
 import requests
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -121,12 +122,13 @@ def reverse_geocode(lat, lon):
 def index():
     return "Welcome"
 
+
+
 @app.route('/get_person_data', methods=['POST'])
 def get_person_data():
     video_capture = None
     engine = None
     try:
-        # Récupérer JSON envoyé par le client
         data = request.get_json()
         lat = data.get('lat')
         lon = data.get('lon')
@@ -150,43 +152,112 @@ def get_person_data():
 
         locations, encodings = detect_faces(frame)
         if not encodings:
-            engine.say("You must sign up.")
-            engine.runAndWait()
+            # Pas de visage détecté
             return jsonify({"message": "Inconnu"}), 404
 
         for encoding in encodings:
             user = recognize_person(encoding)
             if user:
-                user_id = known_user_ids[user["username"]]
+                user_id_str = known_user_ids[user["username"]]
+                user_id = ObjectId(user_id_str)
+
+                user_doc = db.user.find_one({"_id": user_id})
+                role = user_doc.get("role", "").lower() if user_doc else "employee"
+
                 today = date.today()
+                now = datetime.now()
+
                 existing_pointages = list(pointage_collection.find({
-                    "user_id": user_id,
-                    "date_pointage": {"$eq": datetime(today.year, today.month, today.day)}
+                    "user_id": user_id_str,
+                    "date_pointage": {
+                        "$gte": datetime(today.year, today.month, today.day),
+                        "$lt": datetime(today.year, today.month, today.day, 23, 59, 59)
+                    }
                 }).sort("heure_pointage"))
 
-                statut = "arrivee" if not existing_pointages else \
-                         ("depart" if existing_pointages[-1].get("statut") == "arrivee" else "arrivee")
+                # Si déjà absent aujourd'hui, on renvoie les infos sans nouveau pointage
+                absent_pointage = next((p for p in existing_pointages if p.get("statut") == "absent"), None)
+                if absent_pointage:
+                    adresse = absent_pointage.get("adresse", "Adresse inconnue")
+                    engine.say(f"{user['username']}, vous êtes déjà marqué absent aujourd'hui.")
+                    engine.runAndWait()
+                    return jsonify({
+                        "username": user["username"],
+                        "statut": "absent",
+                        "adresse": adresse,
+                        "role": role,
+                        "message": "Déjà absent aujourd'hui, pas de nouveau pointage."
+                    }), 200
+
+                heure = now.hour
+                minute = now.minute
+
+                retard = False
+                absent = False
+                statut = "arrivee"
+
+                if not existing_pointages:
+                    if role == "employee":
+                        if 7 <= heure < 9:
+                            if heure == 9 and minute > 15:
+                                retard = True
+                            else:
+                                statut = "arrivee"
+                        elif heure >= 9 and minute > 15:
+                            absent = True
+                        else:
+                            statut = "arrivee"
+                    elif role in ["site_supervisor", "hr"]:
+                        if 8 <= heure < 10:
+                            if heure == 10 and minute > 15:
+                                retard = True
+                            else:
+                                statut = "arrivee"
+                        elif heure >= 10 and minute > 15:
+                            absent = True
+                        else:
+                            statut = "arrivee"
+                    else:
+                        statut = "arrivee"
+                else:
+                    statut = "depart"
+
+                if absent:
+                    statut = "absent"
+                elif retard:
+                    statut = "retard"
 
                 localisation = {"lat": lat, "lon": lon}
                 adresse = reverse_geocode(lat, lon)
 
                 pointage_doc = {
-                    "user_id": user_id,
+                    "user_id": user_id_str,
                     "username": user["username"],
                     "date_pointage": datetime(today.year, today.month, today.day),
-                    "heure_pointage": datetime.now(),
+                    "heure_pointage": now,
                     "statut": statut,
                     "localisation": localisation,
-                    "adresse": adresse
+                    "adresse": adresse,
+                    "role": role
                 }
                 pointage_collection.insert_one(pointage_doc)
 
-                engine.say(f"Welcome, {user['username']}. Statut {statut}")
+                if absent:
+                    engine.say(f"{user['username']}, vous êtes absent.")
+                elif retard:
+                    engine.say(f"{user['username']}, vous êtes en retard.")
+                else:
+                    engine.say(f"Bienvenue {user['username']}. Statut {statut}")
                 engine.runAndWait()
-                return jsonify({"username": user["username"], "statut": statut, "adresse": adresse}), 200
 
-        engine.say("You must sign up.")
-        engine.runAndWait()
+                return jsonify({
+                    "username": user["username"],
+                    "statut": statut,
+                    "adresse": adresse,
+                    "role": role
+                }), 200
+
+        # Visage non reconnu
         return jsonify({"message": "Inconnu"}), 404
 
     except Exception as e:
