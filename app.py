@@ -1,6 +1,5 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask import request
 import cv2
 import face_recognition
 import pyttsx3
@@ -10,8 +9,8 @@ from PIL import Image
 from pymongo import MongoClient
 from bson.binary import Binary
 import logging
-from datetime import datetime, date
-from bson.objectid import ObjectId 
+from datetime import datetime, date, time
+from bson.objectid import ObjectId
 import requests
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,64 +21,10 @@ CORS(app)
 def mongo_connection():
     try:
         client = MongoClient("mongodb+srv://stage:stage@cluster0.gbm1c.mongodb.net/stage?retryWrites=true&w=majority")
-        db = client.get_database("stage")
-        logging.info("Connexion à MongoDB réussie")
-        return db
+        return client["stage"]
     except Exception as e:
         logging.error(f"Erreur de connexion à MongoDB: {e}")
         return None
-
-def load_known_faces():
-    db = mongo_connection()
-    if db is None:
-        return [], [], {}, {}
-
-    known_faces = []
-    known_names = []
-    known_emails = {}
-    known_user_ids = {}
-
-    try:
-        users = db.user.find({"photo": {"$exists": True}})
-        for user in users:
-            try:
-                image_data = user.get('photo')
-                if not image_data:
-                    continue
-
-                if isinstance(image_data, Binary):
-                    image_bytes = bytes(image_data)
-                else:
-                    image_bytes = image_data
-
-                img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-                img_np = np.array(img)
-
-                face_locations = face_recognition.face_locations(img_np)
-                encodings = face_recognition.face_encodings(img_np, face_locations)
-                if not encodings:
-                    logging.warning(f"Pas de visage détecté pour user {user.get('username', '?')}")
-                    continue
-
-                encoding = encodings[0]
-                username = user.get("username", "Inconnu")
-
-                known_faces.append(encoding)
-                known_names.append(username)
-                known_emails[username] = user.get("email", "")
-                known_user_ids[username] = str(user.get("_id", ""))
-            except Exception as e:
-                logging.error(f"Erreur image utilisateur {user.get('_id', '?')}: {e}")
-                continue
-    except Exception as e:
-        logging.error(f"Erreur MongoDB: {e}")
-
-    logging.info(f"Visages chargés : {len(known_faces)}")
-    logging.info(f"Noms : {known_names}")
-    return known_faces, known_names, known_emails, known_user_ids
-
-# Charger les visages au démarrage
-known_faces, known_names, known_emails, known_user_ids = load_known_faces()
 
 def detect_faces(frame):
     small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
@@ -88,41 +33,57 @@ def detect_faces(frame):
     encodings = face_recognition.face_encodings(rgb_small_frame, locations)
     return locations, encodings
 
-def recognize_person(encoding):
+def recognize_person(encoding, known_faces, known_names):
     matches = face_recognition.compare_faces(known_faces, encoding)
     if True in matches:
         index = matches.index(True)
-        return {
-            "username": known_names[index]
-        }
+        return {"username": known_names[index]}
     return None
 
 def reverse_geocode(lat, lon):
     try:
         url = 'https://nominatim.openstreetmap.org/reverse'
-        params = {
-            'lat': lat,
-            'lon': lon,
-            'format': 'json',
-            'zoom': 18,
-            'addressdetails': 1
-        }
+        params = {'lat': lat, 'lon': lon, 'format': 'json', 'zoom': 18, 'addressdetails': 1}
         headers = {'User-Agent': 'mon-app-pointage/1.0'}
         response = requests.get(url, params=params, headers=headers)
         if response.status_code == 200:
-            data = response.json()
-            return data.get('display_name', 'Adresse inconnue')
-        else:
-            return 'Erreur géocodage'
+            return response.json().get('display_name', 'Adresse inconnue')
+        return 'Erreur géocodage'
     except Exception as e:
         logging.error(f"Erreur géocodage inverse: {e}")
         return 'Erreur géocodage'
 
-@app.route('/analytics')
-def index():
-    return "Welcome"
+def load_known_faces_by_role(role):
+    db = mongo_connection()
+    if db is None:
+        return [], [], {}
 
+    known_faces = []
+    known_names = []
+    known_user_ids = {}
 
+    try:
+        users = db.user.find({"photo": {"$exists": True}, "role": role.upper()})
+        for user in users:
+            image_data = user.get('photo')
+            if not image_data:
+                continue
+            image_bytes = bytes(image_data) if isinstance(image_data, Binary) else image_data
+            img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+            img_np = np.array(img)
+            face_locations = face_recognition.face_locations(img_np)
+            encodings = face_recognition.face_encodings(img_np, face_locations)
+            if not encodings:
+                continue
+            encoding = encodings[0]
+            username = user.get("username", "Inconnu")
+            known_faces.append(encoding)
+            known_names.append(username)
+            known_user_ids[username] = str(user.get("_id"))
+    except Exception as e:
+        logging.error(f"Erreur MongoDB : {e}")
+
+    return known_faces, known_names, known_user_ids
 
 @app.route('/get_person_data', methods=['POST'])
 def get_person_data():
@@ -132,40 +93,59 @@ def get_person_data():
         data = request.get_json()
         lat = data.get('lat')
         lon = data.get('lon')
-        if lat is None or lon is None:
-            return jsonify({"message": "Coordonnées GPS manquantes"}), 400
+        user_id_front = data.get('userId')
+
+        if None in [lat, lon, user_id_front]:
+            return jsonify({"message": "Coordonnées ou ID utilisateur manquants"}), 400
 
         db = mongo_connection()
         if db is None:
             return jsonify({"message": "Erreur base de données"}), 500
+
+        user_doc = db.user.find_one({"_id": ObjectId(user_id_front)})
+        if not user_doc:
+            return jsonify({"message": "Utilisateur non trouvé"}), 404
+
+        role = user_doc.get("role", "EMPLOYEE").upper()
         pointage_collection = db.pointage
+
+        known_faces, known_names, known_user_ids = load_known_faces_by_role(role)
+
+        now = datetime.now()
+        current_time = now.time()
+        today = date.today()
+
+        autorise = (
+            (time(6, 0) <= current_time < time(17, 30)) or
+            (time(19, 0) <= current_time) or
+            (current_time < time(5, 0))
+        )
+
+        if not autorise:
+            engine = pyttsx3.init()
+            engine.say("Pointage non autorisé à cette heure.")
+            engine.runAndWait()
+            return jsonify({"message": "⛔ Pointage non autorisé à cette heure"}), 403
 
         video_capture = cv2.VideoCapture(0)
         if not video_capture.isOpened():
             return jsonify({"message": "Erreur caméra"}), 500
 
-        engine = pyttsx3.init()
-
+        engine = engine or pyttsx3.init()
         ret, frame = video_capture.read()
         if not ret:
             return jsonify({"message": "Erreur capture image"}), 500
 
         locations, encodings = detect_faces(frame)
         if not encodings:
-            # Pas de visage détecté
-            return jsonify({"message": "Inconnu"}), 404
+            engine.say("Aucun visage détecté")
+            engine.runAndWait()
+            return jsonify({"statut": "non_reconnu", "message": "Aucun visage détecté"}), 200
 
         for encoding in encodings:
-            user = recognize_person(encoding)
+            user = recognize_person(encoding, known_faces, known_names)
             if user:
                 user_id_str = known_user_ids[user["username"]]
-                user_id = ObjectId(user_id_str)
-
-                user_doc = db.user.find_one({"_id": user_id})
-                role = user_doc.get("role", "").lower() if user_doc else "employee"
-
-                today = date.today()
-                now = datetime.now()
 
                 existing_pointages = list(pointage_collection.find({
                     "user_id": user_id_str,
@@ -175,59 +155,13 @@ def get_person_data():
                     }
                 }).sort("heure_pointage"))
 
-                # Si déjà absent aujourd'hui, on renvoie les infos sans nouveau pointage
-                absent_pointage = next((p for p in existing_pointages if p.get("statut") == "absent"), None)
-                if absent_pointage:
-                    adresse = absent_pointage.get("adresse", "Adresse inconnue")
-                    engine.say(f"{user['username']}, vous êtes déjà marqué absent aujourd'hui.")
+                statuts = [p["statut"] for p in existing_pointages]
+                if "arrivee" in statuts and "depart" in statuts:
+                    engine.say(f"{user['username']}, pointage complet aujourd'hui.")
                     engine.runAndWait()
-                    return jsonify({
-                        "username": user["username"],
-                        "statut": "absent",
-                        "adresse": adresse,
-                        "role": role,
-                        "message": "Déjà absent aujourd'hui, pas de nouveau pointage."
-                    }), 200
+                    return jsonify({"username": user["username"], "statut": "complet", "role": role}), 200
 
-                heure = now.hour
-                minute = now.minute
-
-                retard = False
-                absent = False
-                statut = "arrivee"
-
-                if not existing_pointages:
-                    if role == "employee":
-                        if 7 <= heure < 9:
-                            if heure == 9 and minute > 15:
-                                retard = True
-                            else:
-                                statut = "arrivee"
-                        elif heure >= 9 and minute > 15:
-                            absent = True
-                        else:
-                            statut = "arrivee"
-                    elif role in ["site_supervisor", "hr"]:
-                        if 8 <= heure < 10:
-                            if heure == 10 and minute > 15:
-                                retard = True
-                            else:
-                                statut = "arrivee"
-                        elif heure >= 10 and minute > 15:
-                            absent = True
-                        else:
-                            statut = "arrivee"
-                    else:
-                        statut = "arrivee"
-                else:
-                    statut = "depart"
-
-                if absent:
-                    statut = "absent"
-                elif retard:
-                    statut = "retard"
-
-                localisation = {"lat": lat, "lon": lon}
+                statut = "arrivee" if "arrivee" not in statuts else "depart"
                 adresse = reverse_geocode(lat, lon)
 
                 pointage_doc = {
@@ -236,18 +170,18 @@ def get_person_data():
                     "date_pointage": datetime(today.year, today.month, today.day),
                     "heure_pointage": now,
                     "statut": statut,
-                    "localisation": localisation,
+                    "localisation": {"lat": lat, "lon": lon},
                     "adresse": adresse,
                     "role": role
                 }
+
+                if statut == "depart":
+                    pointage_doc["heure_depart"] = now.time()
+                    pointage_doc["date_depart"] = today
+
                 pointage_collection.insert_one(pointage_doc)
 
-                if absent:
-                    engine.say(f"{user['username']}, vous êtes absent.")
-                elif retard:
-                    engine.say(f"{user['username']}, vous êtes en retard.")
-                else:
-                    engine.say(f"Bienvenue {user['username']}. Statut {statut}")
+                engine.say(f"{user['username']}, statut {statut} enregistré.")
                 engine.runAndWait()
 
                 return jsonify({
@@ -257,8 +191,9 @@ def get_person_data():
                     "role": role
                 }), 200
 
-        # Visage non reconnu
-        return jsonify({"message": "Inconnu"}), 404
+        engine.say("Visage non reconnu.")
+        engine.runAndWait()
+        return jsonify({"statut": "non_reconnu", "message": "Visage non reconnu."}), 200
 
     except Exception as e:
         logging.error(f"Erreur reconnaissance : {e}")
@@ -268,6 +203,5 @@ def get_person_data():
             video_capture.release()
         if engine:
             engine.stop()
-
 if __name__ == '__main__':
     app.run(debug=True, port=5010)
