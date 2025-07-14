@@ -175,6 +175,12 @@ def get_person_data():
         if not ret:
             return jsonify({"message": "Erreur capture image"}), 500
 
+        # Encode l'image capturée en jpg bytes (pour stockage en base)
+        ret, jpeg = cv2.imencode('.jpg', frame)
+        if not ret:
+            return jsonify({"message": "Erreur encodage image"}), 500
+        image_bytes = jpeg.tobytes()
+
         locations, encodings = detect_faces(frame)
         if not encodings:
             engine.say("Aucun visage détecté")
@@ -212,11 +218,13 @@ def get_person_data():
                             "statut": "arrivee",
                             "localisation": {"lat": lat, "lon": lon},
                             "adresse": adresse,
-                            "role": role
+                            "role": role,
+                            "image": Binary(image_bytes)  # SEULE IMAGE enregistrée ici
                         }
                         pointage_collection.insert_one(pointage_doc)
                     else:
                         statut = "depart"
+                        # Au départ, on n’enregistre PAS l’image
                         pointage_collection.update_one(
                             {"_id": last_pointage["_id"]},
                             {"$set": {
@@ -250,7 +258,6 @@ def get_person_data():
             video_capture.release()
         if engine:
             engine.stop()
-
 # Route manuelle
 @app.route('/verifier_depart_non_autorise', methods=['POST'])
 def verifier_depart_non_autorise_route():
@@ -332,8 +339,8 @@ scheduler = BackgroundScheduler(timezone='Africa/Tunis')
 scheduler.add_job(
     func=lambda: verifier_depart_non_autorise_interne(datetime.now() - timedelta(days=1)),
     trigger='cron',
-    hour=12,
-    minute=39,
+    hour=6,
+    minute=00,
     id='depart_non_autorise_job',
     name='Vérification départ non autorisé 12h31',
     replace_existing=True
