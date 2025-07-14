@@ -135,7 +135,6 @@ def verifier_depart_non_autorise_pour_jour_precedent(db, user_id, username, role
         }
         notification_collection.insert_one(notification_doc)
         logging.info(f"Notification départ non autorisé créée pour user {username} hier.")
-
 @app.route('/get_person_data', methods=['POST'])
 def get_person_data():
     video_capture = None
@@ -154,9 +153,10 @@ def get_person_data():
 
         now = datetime.now()
         current_time = now.time()
+        today_start = datetime(now.year, now.month, now.day)
 
         autorise = (
-            (time(10, 30) <= current_time <= time(17, 30)) or
+            (time(7, 30) <= current_time <= time(17, 30)) or
             (time(19, 0) <= current_time or current_time < time(5, 0))
         )
 
@@ -175,7 +175,6 @@ def get_person_data():
         if not ret:
             return jsonify({"message": "Erreur capture image"}), 500
 
-        # Encode l'image capturée en jpg bytes (pour stockage en base)
         ret, jpeg = cv2.imencode('.jpg', frame)
         if not ret:
             return jsonify({"message": "Erreur encodage image"}), 500
@@ -196,45 +195,68 @@ def get_person_data():
                     adresse = reverse_geocode(lat, lon)
                     pointage_collection = db.pointage
 
-                    now = datetime.now()
-                    today_start = datetime(now.year, now.month, now.day)
+                    pointage_doc = pointage_collection.find_one({
+                        "user_id": user_id_str,
+                        "date_pointage": today_start
+                    })
 
-                    last_pointage = pointage_collection.find_one(
-                        {"user_id": user_id_str},
-                        sort=[("heure_pointage", -1)]
-                    )
-
-                    if not last_pointage or last_pointage.get("statut") == "depart":
+                    if not pointage_doc:
                         statut = "arrivee"
-
-                        # Avant insertion arrivée, vérifie le départ d’hier
-                        verifier_depart_non_autorise_pour_jour_precedent(db, user_id_str, user["username"], role, adresse)
-
-                        pointage_doc = {
-                            "user_id": user_id_str,
-                            "username": user["username"],
-                            "date_pointage": today_start,
-                            "heure_pointage": now,
-                            "statut": "arrivee",
-                            "localisation": {"lat": lat, "lon": lon},
-                            "adresse": adresse,
-                            "role": role,
-                            "image": Binary(image_bytes)  # SEULE IMAGE enregistrée ici
-                        }
-                        pointage_collection.insert_one(pointage_doc)
                     else:
-                        statut = "depart"
-                        # Au départ, on n’enregistre PAS l’image
-                        pointage_collection.update_one(
-                            {"_id": last_pointage["_id"]},
-                            {"$set": {
-                                "statut": "depart",
-                                "date_depart": today_start,
-                                "heure_depart": now,
-                                "adresse": adresse,
-                                "localisation": {"lat": lat, "lon": lon}
-                            }}
+                        nb_arrivees = len(pointage_doc.get("arrivees", []))
+                        nb_departs = len(pointage_doc.get("departs", []))
+                        statut = "arrivee" if nb_arrivees <= nb_departs else "depart"
+
+                    if statut == "arrivee":
+                        verifier_depart_non_autorise_pour_jour_precedent(
+                            db, user_id_str, user["username"], role, adresse
                         )
+
+                        pointage_collection.update_one(
+                            {"user_id": user_id_str, "date_pointage": today_start},
+                            {
+                                "$setOnInsert": {
+                                    "user_id": user_id_str,
+                                    "username": user["username"],
+                                    "date_pointage": today_start,
+                                    "role": role
+                                },
+                                "$push": {
+                                    "arrivees": {
+                                        "heure": now,
+                                        "image": Binary(image_bytes)
+                                    }
+                                },
+                                "$set": {
+                                    "adresse": adresse,
+                                    "localisation": {"lat": lat, "lon": lon}
+                                }
+                            },
+                            upsert=True
+                        )
+                    else:  # depart
+                        pointage_collection.update_one(
+                            {"user_id": user_id_str, "date_pointage": today_start},
+                            {
+                                "$push": {
+                                    "departs": {
+                                        "heure": now
+                                    }
+                                },
+                                "$set": {
+                                    "adresse": adresse,
+                                    "localisation": {"lat": lat, "lon": lon}
+                                }
+                            }
+                        )
+
+                    # Récupère les heures actuelles pour retour
+                    final_doc = pointage_collection.find_one({
+                        "user_id": user_id_str,
+                        "date_pointage": today_start
+                    })
+                    heures_arrivee = [a["heure"].strftime("%H:%M:%S") for a in final_doc.get("arrivees", [])]
+                    heures_depart = [d["heure"].strftime("%H:%M:%S") for d in final_doc.get("departs", [])]
 
                     engine.say(f"{user['username']}, statut {statut} enregistré.")
                     engine.runAndWait()
@@ -243,7 +265,9 @@ def get_person_data():
                         "username": user["username"],
                         "statut": statut,
                         "adresse": adresse,
-                        "role": role
+                        "role": role,
+                        "heures_arrivee": heures_arrivee,
+                        "heures_depart": heures_depart
                     }), 200
 
         engine.say("Visage non reconnu.")
@@ -258,7 +282,7 @@ def get_person_data():
             video_capture.release()
         if engine:
             engine.stop()
-# Route manuelle
+
 @app.route('/verifier_depart_non_autorise', methods=['POST'])
 def verifier_depart_non_autorise_route():
     try:
