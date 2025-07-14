@@ -9,11 +9,12 @@ from PIL import Image
 from pymongo import MongoClient
 from bson.binary import Binary
 import logging
-from datetime import datetime, date, time
+from datetime import datetime, time, timedelta
 from bson.objectid import ObjectId
 import requests
+from apscheduler.schedulers.background import BackgroundScheduler
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
 CORS(app)
@@ -58,12 +59,10 @@ def load_known_faces_by_role(role):
     if db is None:
         return [], [], {}
 
-    known_faces = []
-    known_names = []
-    known_user_ids = {}
+    known_faces, known_names, known_user_ids = [], [], {}
 
     try:
-        users = db.user.find({"photo": {"$exists": True}, "role": role.upper()})
+        users = db.user.find({"photo": {"$exists": True}, "role": role})
         for user in users:
             image_data = user.get('photo')
             if not image_data:
@@ -71,8 +70,7 @@ def load_known_faces_by_role(role):
             image_bytes = bytes(image_data) if isinstance(image_data, Binary) else image_data
             img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
             img_np = np.array(img)
-            face_locations = face_recognition.face_locations(img_np)
-            encodings = face_recognition.face_encodings(img_np, face_locations)
+            encodings = face_recognition.face_encodings(img_np)
             if not encodings:
                 continue
             encoding = encodings[0]
@@ -85,6 +83,59 @@ def load_known_faces_by_role(role):
 
     return known_faces, known_names, known_user_ids
 
+def verifier_depart_non_autorise_pour_jour_precedent(db, user_id, username, role, adresse):
+    """
+    Vérifie si le dernier départ d’hier est avant 11h (jour) ou 4h (nuit),
+    et ajoute une notification depart_non_autorise si besoin.
+    """
+    pointage_collection = db.pointage
+    notification_collection = db.notification
+
+    hier = datetime.now() - timedelta(days=1)
+    day_start = datetime(hier.year, hier.month, hier.day)
+    day_end = datetime(hier.year, hier.month, hier.day, 23, 59, 59)
+
+    # Cherche le dernier départ hier
+    dernier_depart = pointage_collection.find_one(
+        {
+            "user_id": user_id,
+            "date_pointage": {"$gte": day_start, "$lt": day_end},
+            "statut": "depart"
+        },
+        sort=[("heure_depart", -1)]
+    )
+    if not dernier_depart:
+        return  # Pas de départ hier
+
+    heure_depart = dernier_depart.get("heure_depart") or dernier_depart.get("heure_pointage")
+    if not heure_depart:
+        return
+
+    heure_depart_time = heure_depart.time()
+    # Conditions horaires strictes pour notification
+    if heure_depart_time < time(11, 0) or heure_depart_time < time(4, 0):
+        # Vérifie si notification existe déjà
+        exists = notification_collection.find_one({
+            "user_id": user_id,
+            "date": day_start,
+            "statut": "depart_non_autorise"
+        })
+        if exists:
+            return  # Notification déjà existante
+
+        notification_doc = {
+            "user_id": user_id,
+            "username": username,
+            "date": day_start,
+            "heure": heure_depart,
+            "statut": "depart_non_autorise",
+            "message": f"Dernier départ hier non autorisé à {heure_depart.strftime('%H:%M:%S')}",
+            "role": role,
+            "adresse": adresse
+        }
+        notification_collection.insert_one(notification_doc)
+        logging.info(f"Notification départ non autorisé créée pour user {username} hier.")
+
 @app.route('/get_person_data', methods=['POST'])
 def get_person_data():
     video_capture = None
@@ -93,32 +144,20 @@ def get_person_data():
         data = request.get_json()
         lat = data.get('lat')
         lon = data.get('lon')
-        user_id_front = data.get('userId')
 
-        if None in [lat, lon, user_id_front]:
-            return jsonify({"message": "Coordonnées ou ID utilisateur manquants"}), 400
+        if None in [lat, lon]:
+            return jsonify({"message": "Coordonnées manquantes"}), 400
 
         db = mongo_connection()
         if db is None:
             return jsonify({"message": "Erreur base de données"}), 500
 
-        user_doc = db.user.find_one({"_id": ObjectId(user_id_front)})
-        if not user_doc:
-            return jsonify({"message": "Utilisateur non trouvé"}), 404
-
-        role = user_doc.get("role", "EMPLOYEE").upper()
-        pointage_collection = db.pointage
-
-        known_faces, known_names, known_user_ids = load_known_faces_by_role(role)
-
         now = datetime.now()
         current_time = now.time()
-        today = date.today()
 
         autorise = (
-            (time(6, 0) <= current_time < time(17, 30)) or
-            (time(19, 0) <= current_time) or
-            (current_time < time(5, 0))
+            (time(10, 30) <= current_time <= time(17, 30)) or
+            (time(19, 0) <= current_time or current_time < time(5, 0))
         )
 
         if not autorise:
@@ -131,7 +170,7 @@ def get_person_data():
         if not video_capture.isOpened():
             return jsonify({"message": "Erreur caméra"}), 500
 
-        engine = engine or pyttsx3.init()
+        engine = pyttsx3.init()
         ret, frame = video_capture.read()
         if not ret:
             return jsonify({"message": "Erreur capture image"}), 500
@@ -143,53 +182,61 @@ def get_person_data():
             return jsonify({"statut": "non_reconnu", "message": "Aucun visage détecté"}), 200
 
         for encoding in encodings:
-            user = recognize_person(encoding, known_faces, known_names)
-            if user:
-                user_id_str = known_user_ids[user["username"]]
+            for role in ["SITE_SUPERVISOR", "EMPLOYEE", "ADMIN"]:
+                known_faces, known_names, known_user_ids = load_known_faces_by_role(role)
+                user = recognize_person(encoding, known_faces, known_names)
+                if user:
+                    user_id_str = known_user_ids[user["username"]]
+                    adresse = reverse_geocode(lat, lon)
+                    pointage_collection = db.pointage
 
-                existing_pointages = list(pointage_collection.find({
-                    "user_id": user_id_str,
-                    "date_pointage": {
-                        "$gte": datetime(today.year, today.month, today.day),
-                        "$lt": datetime(today.year, today.month, today.day, 23, 59, 59)
-                    }
-                }).sort("heure_pointage"))
+                    now = datetime.now()
+                    today_start = datetime(now.year, now.month, now.day)
 
-                statuts = [p["statut"] for p in existing_pointages]
-                if "arrivee" in statuts and "depart" in statuts:
-                    engine.say(f"{user['username']}, pointage complet aujourd'hui.")
+                    last_pointage = pointage_collection.find_one(
+                        {"user_id": user_id_str},
+                        sort=[("heure_pointage", -1)]
+                    )
+
+                    if not last_pointage or last_pointage.get("statut") == "depart":
+                        statut = "arrivee"
+
+                        # Avant insertion arrivée, vérifie le départ d’hier
+                        verifier_depart_non_autorise_pour_jour_precedent(db, user_id_str, user["username"], role, adresse)
+
+                        pointage_doc = {
+                            "user_id": user_id_str,
+                            "username": user["username"],
+                            "date_pointage": today_start,
+                            "heure_pointage": now,
+                            "statut": "arrivee",
+                            "localisation": {"lat": lat, "lon": lon},
+                            "adresse": adresse,
+                            "role": role
+                        }
+                        pointage_collection.insert_one(pointage_doc)
+                    else:
+                        statut = "depart"
+                        pointage_collection.update_one(
+                            {"_id": last_pointage["_id"]},
+                            {"$set": {
+                                "statut": "depart",
+                                "date_depart": today_start,
+                                "heure_depart": now,
+                                "adresse": adresse,
+                                "localisation": {"lat": lat, "lon": lon}
+                            }}
+                        )
+
+                    engine.say(f"{user['username']}, statut {statut} enregistré.")
                     engine.runAndWait()
-                    return jsonify({"username": user["username"], "statut": "complet", "role": role}), 200
 
-                statut = "arrivee" if "arrivee" not in statuts else "depart"
-                adresse = reverse_geocode(lat, lon)
-
-                pointage_doc = {
-                    "user_id": user_id_str,
-                    "username": user["username"],
-                    "date_pointage": datetime(today.year, today.month, today.day),
-                    "heure_pointage": now,
-                    "statut": statut,
-                    "localisation": {"lat": lat, "lon": lon},
-                    "adresse": adresse,
-                    "role": role
-                }
-
-                if statut == "depart":
-                    pointage_doc["heure_depart"] = now.time()
-                    pointage_doc["date_depart"] = today
-
-                pointage_collection.insert_one(pointage_doc)
-
-                engine.say(f"{user['username']}, statut {statut} enregistré.")
-                engine.runAndWait()
-
-                return jsonify({
-                    "username": user["username"],
-                    "statut": statut,
-                    "adresse": adresse,
-                    "role": role
-                }), 200
+                    return jsonify({
+                        "username": user["username"],
+                        "statut": statut,
+                        "adresse": adresse,
+                        "role": role
+                    }), 200
 
         engine.say("Visage non reconnu.")
         engine.runAndWait()
@@ -203,5 +250,96 @@ def get_person_data():
             video_capture.release()
         if engine:
             engine.stop()
+
+# Route manuelle
+@app.route('/verifier_depart_non_autorise', methods=['POST'])
+def verifier_depart_non_autorise_route():
+    try:
+        data = request.get_json() or {}
+        date_str = data.get("date")
+        check_date = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.now()
+        verifier_depart_non_autorise_interne(check_date)
+        return jsonify({"message": f"Vérification terminée pour {check_date.strftime('%Y-%m-%d')}"}), 200
+    except Exception as e:
+        logging.error(f"Erreur route vérification départs : {e}")
+        return jsonify({"message": "Erreur serveur"}), 500
+
+# Fonction interne
+def verifier_depart_non_autorise_interne(check_date=None):
+    db = mongo_connection()
+    if db is None:
+        logging.error("Erreur base de données")
+        return
+
+    if check_date is None:
+        check_date = datetime.now()
+
+    pointage_collection = db.pointage
+    notification_collection = db.notification
+
+    day_start = datetime(check_date.year, check_date.month, check_date.day)
+    day_end = datetime(check_date.year, check_date.month, check_date.day, 23, 59, 59)
+
+    pipeline = [
+        {"$match": {
+            "date_pointage": {"$gte": day_start, "$lt": day_end},
+            "statut": {"$in": ["depart", "depart_non_autorise"]}
+        }},
+        {"$sort": {"heure_pointage": -1}},
+        {"$group": {
+            "_id": "$user_id",
+            "dernier_pointage": {"$first": "$$ROOT"}
+        }}
+    ]
+
+    results = pointage_collection.aggregate(pipeline)
+
+    for entry in results:
+        pointage = entry["dernier_pointage"]
+        heure_depart = pointage.get("heure_depart") or pointage.get("heure_pointage")
+        if not heure_depart:
+            continue
+
+        heure_depart_time = heure_depart.time()
+        is_day = time(10, 30) <= heure_depart_time <= time(17, 30)
+        heure_limite = time(16, 0) if is_day else time(4, 0)
+
+        if heure_depart_time < heure_limite:
+            exists = notification_collection.find_one({
+                "user_id": pointage["user_id"],
+                "date": day_start,
+                "statut": "depart_non_autorise"
+            })
+            if exists:
+                continue
+
+            notification_doc = {
+                "user_id": pointage["user_id"],
+                "username": pointage["username"],
+                "date": day_start,
+                "heure": heure_depart,
+                "statut": "depart_non_autorise",
+                "message": f"Dernier départ non autorisé à {heure_depart.strftime('%H:%M:%S')}",
+                "role": pointage.get("role"),
+                "adresse": pointage.get("adresse", "")
+            }
+            notification_collection.insert_one(notification_doc)
+
+    logging.info(f"✅ Vérification des départs non autorisés pour {check_date.strftime('%Y-%m-%d')} terminée")
+
+# ⏰ Planificateur automatique à 12h31
+scheduler = BackgroundScheduler(timezone='Africa/Tunis')
+scheduler.add_job(
+    func=lambda: verifier_depart_non_autorise_interne(datetime.now() - timedelta(days=1)),
+    trigger='cron',
+    hour=12,
+    minute=39,
+    id='depart_non_autorise_job',
+    name='Vérification départ non autorisé 12h31',
+    replace_existing=True
+)
+scheduler.start()
+logging.info("🗓️ Planificateur initialisé : vérification quotidienne à 12h31")
+
 if __name__ == '__main__':
     app.run(debug=True, port=5010)
