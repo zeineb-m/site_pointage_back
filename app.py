@@ -213,27 +213,28 @@ def get_person_data():
                         )
 
                         pointage_collection.update_one(
-                            {"user_id": user_id_str, "date_pointage": today_start},
-                            {
-                                "$setOnInsert": {
-                                    "user_id": user_id_str,
-                                    "username": user["username"],
-                                    "date_pointage": today_start,
-                                    "role": role
-                                },
-                                "$push": {
-                                    "arrivees": {
-                                        "heure": now,
-                                        "image": Binary(image_bytes)
-                                    }
-                                },
-                                "$set": {
-                                    "adresse": adresse,
-                                    "localisation": {"lat": lat, "lon": lon}
-                                }
-                            },
-                            upsert=True
-                        )
+    {"user_id": user_id_str, "date_pointage": today_start},
+    {
+        "$setOnInsert": {
+            "user_id": user_id_str,
+            "username": user["username"],
+            "date_pointage": today_start,
+            "role": role
+        },
+        "$push": {
+            "arrivees": {
+                "heure": now
+            }
+        },
+        "$set": {
+            "image": Binary(image_bytes),
+            "adresse": adresse,
+            "localisation": {"lat": lat, "lon": lon}
+        }
+    },
+    upsert=True
+)
+
                     else:  # depart
                         pointage_collection.update_one(
                             {"user_id": user_id_str, "date_pointage": today_start},
