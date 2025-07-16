@@ -11,4 +11,5 @@ public interface UserService {
     User updateUser(User user);
     User getUserByEmail(String email);
     User authenticate(String email, String password);
+
 }

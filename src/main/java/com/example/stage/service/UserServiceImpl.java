@@ -3,6 +3,7 @@ package com.example.stage.service;
 
 import com.example.stage.Model.User;
 import com.example.stage.Repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -10,9 +11,12 @@ import java.util.List;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository repo;
+    private PasswordEncoder passwordEncoder;
 
-    public UserServiceImpl(UserRepository repo) {
+
+    public UserServiceImpl(UserRepository repo, PasswordEncoder passwordEncoder) {
         this.repo = repo;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -43,10 +47,12 @@ public class UserServiceImpl implements UserService {
         }
         return repo.save(user);
     }
+
+
     @Override
     public User authenticate(String email, String password) {
-        User user = repo.findByEmail(email); // <-- CORRECTION ICI
-        if (user != null && user.getPassword().equals(password)) {
+        User user = repo.findByEmail(email);
+        if (user != null && passwordEncoder.matches(password, user.getPassword())) {
             return user;
         }
         return null;

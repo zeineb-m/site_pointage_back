@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
@@ -27,6 +28,8 @@ public class UserController {
 
     @Autowired
     private RestTemplate restTemplate;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Autowired
     public UserController(UserService userService) {
@@ -85,7 +88,8 @@ public class UserController {
             if (!flaskResponse.getStatusCode().is2xxSuccessful()) {
                 return ResponseEntity.badRequest().body(flaskResponse.getBody());
             }
-
+            String hashedPassword = passwordEncoder.encode(user.getPassword());
+            user.setPassword(hashedPassword);
             User createdUser = userService.createUser(user);
             return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
 
