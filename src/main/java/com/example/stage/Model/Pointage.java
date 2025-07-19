@@ -1,7 +1,9 @@
 package com.example.stage.Model;
 
+import org.bson.types.Binary;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -24,29 +26,45 @@ public class Pointage {
 
     private String adresse;
 
-    public String getUser_id() {
-        return user_id;
-    }
+    @Field("image")
+    private Binary image;
 
-    public void setUser_id(String user_id) {
-        this.user_id = user_id;
-    }
+    @Field("role")
+    private String role;
 
-    public LocalDate getDate_pointage() {
-        return date_pointage;
-    }
+    // === Getters & Setters ===
 
-    public void setDate_pointage(LocalDate date_pointage) {
-        this.date_pointage = date_pointage;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public LocalDateTime getHeure_pointage() {
-        return heure_pointage;
-    }
+    public String getUser_id() { return user_id; }
+    public void setUser_id(String user_id) { this.user_id = user_id; }
 
-    public void setHeure_pointage(LocalDateTime heure_pointage) {
-        this.heure_pointage = heure_pointage;
-    }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+
+    public LocalDate getDate_pointage() { return date_pointage; }
+    public void setDate_pointage(LocalDate date_pointage) { this.date_pointage = date_pointage; }
+
+    public LocalDateTime getHeure_pointage() { return heure_pointage; }
+    public void setHeure_pointage(LocalDateTime heure_pointage) { this.heure_pointage = heure_pointage; }
+
+    public String getStatut() { return statut; }
+    public void setStatut(String statut) { this.statut = statut; }
+
+    public Localisation getLocalisation() { return localisation; }
+    public void setLocalisation(Localisation localisation) { this.localisation = localisation; }
+
+    public String getAdresse() { return adresse; }
+    public void setAdresse(String adresse) { this.adresse = adresse; }
+
+    public Binary getImage() { return image; }
+    public void setImage(Binary image) { this.image = image; }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+
+    // === Localisation interne ===
 
     public static class Localisation {
         private double lat;
@@ -58,22 +76,4 @@ public class Pointage {
         public double getLon() { return lon; }
         public void setLon(double lon) { this.lon = lon; }
     }
-
-    // Getters and Setters pour Pointage
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-
-
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
-
-
-    public String getStatut() { return statut; }
-    public void setStatut(String statut) { this.statut = statut; }
-
-    public Localisation getLocalisation() { return localisation; }
-    public void setLocalisation(Localisation localisation) { this.localisation = localisation; }
-
-    public String getAdresse() { return adresse; }
-    public void setAdresse(String adresse) { this.adresse = adresse; }
 }

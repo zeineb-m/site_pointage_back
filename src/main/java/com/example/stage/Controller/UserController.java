@@ -2,6 +2,7 @@ package com.example.stage.Controller;
 
 import com.example.stage.Model.Role;
 import com.example.stage.Model.User;
+import com.example.stage.service.EmailService;
 import com.example.stage.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +26,8 @@ public class UserController {
 
     private final UserService userService;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
+    @Autowired
+    private EmailService emailService;
     @Autowired
     private RestTemplate restTemplate;
     @Autowired
@@ -238,4 +240,45 @@ public class UserController {
         response.put("address", user.getAddress());
         return ResponseEntity.ok(response);
     }
+
+    // 1. Envoi de code reset par email
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> payload) {
+        String email = payload.get("email");
+        User user = userService.getUserByEmail(email);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Collections.singletonMap("message", "Email non trouvé"));
+        }
+        // Générer un code à 6 chiffres
+        String code = String.valueOf(new Random().nextInt(900000) + 100000);
+        user.setResetCode(code);
+        userService.updateUser(user);
+
+        emailService.sendEmail(email, "Réinitialisation de mot de passe",
+                "Votre code de réinitialisation est : " + code);
+
+        return ResponseEntity.ok(Collections.singletonMap("message", "Code envoyé par email"));
+    }
+
+    // 2. Réinitialiser le mot de passe avec code
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> payload) {
+        String email = payload.get("email");
+        String code = payload.get("code");
+        String newPassword = payload.get("newPassword");
+
+        User user = userService.getUserByEmail(email);
+        if (user == null || user.getResetCode() == null || !user.getResetCode().equals(code)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Collections.singletonMap("message", "Code invalide ou email incorrect"));
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setResetCode(null);
+        userService.updateUser(user);
+
+        return ResponseEntity.ok(Collections.singletonMap("message", "Mot de passe réinitialisé avec succès"));
+    }
+
 }

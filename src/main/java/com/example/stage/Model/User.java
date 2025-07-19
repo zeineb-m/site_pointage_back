@@ -18,6 +18,10 @@ public class User {
     private String photoHash;
     private String phone;
     private String address;
+    private String resetCode;
+    public String getResetCode() { return resetCode; }
+    public void setResetCode(String resetCode) { this.resetCode = resetCode; }
+
     public User() {}
 
     public User(String id, String username, String email, String password, Role role, byte[]  photo, String supervisorId, String photoHash, String phone, String address) {
