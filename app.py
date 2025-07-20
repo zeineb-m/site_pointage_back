@@ -19,6 +19,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 app = Flask(__name__)
 CORS(app)
 
+# ==========================
+# CONNEXION MONGO
+# ==========================
 def mongo_connection():
     try:
         client = MongoClient("mongodb+srv://stage:stage@cluster0.gbm1c.mongodb.net/stage?retryWrites=true&w=majority")
@@ -27,6 +30,9 @@ def mongo_connection():
         logging.error(f"Erreur de connexion à MongoDB: {e}")
         return None
 
+# ==========================
+# FONCTIONS FACIALES
+# ==========================
 def detect_faces(frame):
     small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
     rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
@@ -83,50 +89,49 @@ def load_known_faces_by_role(role):
 
     return known_faces, known_names, known_user_ids
 
+# ==========================
+# VÉRIFICATION DÉPART NON AUTORISÉ
+# ==========================
 def verifier_depart_non_autorise_pour_jour_precedent(db, user_id, username, role, adresse):
-    """
-    Vérifie si le dernier départ d’hier est avant 11h (jour) ou 4h (nuit),
-    et ajoute une notification depart_non_autorise si besoin.
-    """
+    hier = datetime.now() - timedelta(days=1)
+    jour_prec_debut = datetime(hier.year, hier.month, hier.day)
+    jour_prec_fin = jour_prec_debut + timedelta(days=1)
+
     pointage_collection = db.pointage
     notification_collection = db.notification
 
-    hier = datetime.now() - timedelta(days=1)
-    day_start = datetime(hier.year, hier.month, hier.day)
-    day_end = datetime(hier.year, hier.month, hier.day, 23, 59, 59)
-
-    # Cherche le dernier départ hier
     dernier_depart = pointage_collection.find_one(
         {
             "user_id": user_id,
-            "date_pointage": {"$gte": day_start, "$lt": day_end},
+            "date_pointage": {"$gte": jour_prec_debut, "$lt": jour_prec_fin},
             "statut": "depart"
         },
         sort=[("heure_depart", -1)]
     )
     if not dernier_depart:
-        return  # Pas de départ hier
+        return
 
     heure_depart = dernier_depart.get("heure_depart") or dernier_depart.get("heure_pointage")
     if not heure_depart:
         return
 
     heure_depart_time = heure_depart.time()
-    # Conditions horaires strictes pour notification
-    if heure_depart_time < time(11, 0) or heure_depart_time < time(4, 0):
-        # Vérifie si notification existe déjà
+    limite_jour = time(16, 0)
+    limite_nuit = time(4, 0)
+
+    if heure_depart_time < limite_jour or heure_depart_time < limite_nuit:
         exists = notification_collection.find_one({
             "user_id": user_id,
-            "date": day_start,
+            "date": jour_prec_debut,
             "statut": "depart_non_autorise"
         })
         if exists:
-            return  # Notification déjà existante
+            return
 
         notification_doc = {
             "user_id": user_id,
             "username": username,
-            "date": day_start,
+            "date": jour_prec_debut,
             "heure": heure_depart,
             "statut": "depart_non_autorise",
             "message": f"Dernier départ hier non autorisé à {heure_depart.strftime('%H:%M:%S')}",
@@ -135,6 +140,10 @@ def verifier_depart_non_autorise_pour_jour_precedent(db, user_id, username, role
         }
         notification_collection.insert_one(notification_doc)
         logging.info(f"Notification départ non autorisé créée pour user {username} hier.")
+
+# ==========================
+# ROUTE POINTAGE
+# ==========================
 @app.route('/get_person_data', methods=['POST'])
 def get_person_data():
     video_capture = None
@@ -157,7 +166,7 @@ def get_person_data():
 
         autorise = (
             (time(7, 30) <= current_time <= time(17, 30)) or
-            (time(19, 0) <= current_time or current_time < time(5, 0))
+            (current_time >= time(19, 0) or current_time < time(5, 0))
         )
 
         if not autorise:
@@ -197,7 +206,7 @@ def get_person_data():
 
                     pointage_doc = pointage_collection.find_one({
                         "user_id": user_id_str,
-                        "date_pointage": today_start
+                        "date_pointage": {"$gte": today_start, "$lt": today_start + timedelta(days=1)}
                     })
 
                     if not pointage_doc:
@@ -213,37 +222,34 @@ def get_person_data():
                         )
 
                         pointage_collection.update_one(
-    {"user_id": user_id_str, "date_pointage": today_start},
-    {
-        "$setOnInsert": {
-            "user_id": user_id_str,
-            "username": user["username"],
-            "date_pointage": today_start,
-            "role": role
-        },
-        "$push": {
-            "arrivees": {
-                "heure": now
-            }
-        },
-        "$set": {
-            "image": Binary(image_bytes),
-            "adresse": adresse,
-            "localisation": {"lat": lat, "lon": lon}
-        }
-    },
-    upsert=True
-)
-
+                            {
+                                "user_id": user_id_str,
+                                "date_pointage": {"$gte": today_start, "$lt": today_start + timedelta(days=1)}
+                            },
+                            {
+                                "$setOnInsert": {
+                                    "user_id": user_id_str,
+                                    "username": user["username"],
+                                    "date_pointage": today_start,
+                                    "role": role
+                                },
+                                "$push": {"arrivees": {"heure": now}},
+                                "$set": {
+                                    "image": Binary(image_bytes),
+                                    "adresse": adresse,
+                                    "localisation": {"lat": lat, "lon": lon}
+                                }
+                            },
+                            upsert=True
+                        )
                     else:  # depart
                         pointage_collection.update_one(
-                            {"user_id": user_id_str, "date_pointage": today_start},
                             {
-                                "$push": {
-                                    "departs": {
-                                        "heure": now
-                                    }
-                                },
+                                "user_id": user_id_str,
+                                "date_pointage": {"$gte": today_start, "$lt": today_start + timedelta(days=1)}
+                            },
+                            {
+                                "$push": {"departs": {"heure": now}},
                                 "$set": {
                                     "adresse": adresse,
                                     "localisation": {"lat": lat, "lon": lon}
@@ -251,10 +257,9 @@ def get_person_data():
                             }
                         )
 
-                    # Récupère les heures actuelles pour retour
                     final_doc = pointage_collection.find_one({
                         "user_id": user_id_str,
-                        "date_pointage": today_start
+                        "date_pointage": {"$gte": today_start, "$lt": today_start + timedelta(days=1)}
                     })
                     heures_arrivee = [a["heure"].strftime("%H:%M:%S") for a in final_doc.get("arrivees", [])]
                     heures_depart = [d["heure"].strftime("%H:%M:%S") for d in final_doc.get("departs", [])]
@@ -284,6 +289,115 @@ def get_person_data():
         if engine:
             engine.stop()
 
+# ==========================
+# VERIFICATION DES DEPARTS NON AUTORISES (INTERNE)
+# ==========================
+def verifier_depart_non_autorise_interne(check_date=None):
+    db = mongo_connection()
+    if db is None:
+        logging.error("Erreur base de données")
+        return
+
+    if check_date is None:
+        check_date = datetime.now()
+
+    jour_prec = check_date - timedelta(days=1)
+    jour_prec_debut = datetime(jour_prec.year, jour_prec.month, jour_prec.day)
+    jour_prec_fin = jour_prec_debut + timedelta(days=1)
+
+    pointage_collection = db.pointage
+    notification_collection = db.notification
+
+    # Récupération des départs
+    results = pointage_collection.find({
+        "date_pointage": {"$gte": jour_prec_debut, "$lt": jour_prec_fin},
+        "statut": "depart"
+    })
+
+    for depart in results:
+        heure_depart = depart.get("heure_depart") or depart.get("heure_pointage")
+        if not heure_depart:
+            continue
+
+        heure_depart_time = heure_depart.time()
+        limite = time(16, 0) if heure_depart_time >= time(7, 30) and heure_depart_time <= time(17, 30) else time(4, 0)
+
+        if heure_depart_time < limite:
+            exists = notification_collection.find_one({
+                "user_id": depart["user_id"],
+                "date": jour_prec_debut,
+                "statut": "depart_non_autorise"
+            })
+            if exists:
+                continue
+
+            notification_doc = {
+                "user_id": depart["user_id"],
+                "username": depart.get("username", ""),
+                "date": jour_prec_debut,
+                "heure": heure_depart,
+                "statut": "depart_non_autorise",
+                "message": f"Départ non autorisé à {heure_depart.strftime('%H:%M:%S')}",
+                "role": depart.get("role", ""),
+                "adresse": depart.get("adresse", "")
+            }
+            notification_collection.insert_one(notification_doc)
+            logging.info(f"Notification départ non autorisé créée pour {depart.get('username', '')}.")
+
+    logging.info(f"✅ Vérification départs non autorisés terminée")
+
+# ==========================
+# VERIFICATION ABSENCES
+# ==========================
+def verifier_absences_fin_journee():
+    db = mongo_connection()
+    if db is None:
+        logging.error("Erreur base de données")
+        return
+
+    user_collection = db.user
+    pointage_collection = db.pointage
+    notification_collection = db.notification
+
+    now = datetime.now()
+    jour_prec = now - timedelta(days=1)
+    jour_prec_debut = datetime(jour_prec.year, jour_prec.month, jour_prec.day)
+    jour_prec_fin = jour_prec_debut + timedelta(days=1)
+
+    users = list(user_collection.find({"role": {"$ne": "ADMIN"}}))
+
+    for user in users:
+        user_id = str(user["_id"])
+
+        count = pointage_collection.count_documents({
+            "user_id": user_id,
+            "date_pointage": {"$gte": jour_prec_debut, "$lt": jour_prec_fin}
+        })
+
+        if count == 0:
+            exists = notification_collection.find_one({
+                "user_id": user_id,
+                "date": jour_prec_debut,
+                "statut": "absent"
+            })
+            if exists:
+                continue
+
+            notif = {
+                "user_id": user_id,
+                "username": user.get("username", "Inconnu"),
+                "date": jour_prec_debut,
+                "statut": "absent",
+                "message": "Absence détectée (pas de pointage sur 24h)",
+                "role": user.get("role", ""),
+                "adresse": ""
+            }
+            notification_collection.insert_one(notif)
+            logging.info(f"Notification absence créée pour user {user.get('username', 'Inconnu')}")
+
+# ==========================
+# ROUTES MANUELLES
+# ==========================
 @app.route('/verifier_depart_non_autorise', methods=['POST'])
 def verifier_depart_non_autorise_route():
     try:
@@ -296,82 +410,36 @@ def verifier_depart_non_autorise_route():
         logging.error(f"Erreur route vérification départs : {e}")
         return jsonify({"message": "Erreur serveur"}), 500
 
-# Fonction interne
-def verifier_depart_non_autorise_interne(check_date=None):
-    db = mongo_connection()
-    if db is None:
-        logging.error("Erreur base de données")
-        return
+@app.route('/verifier_fin_journee', methods=['POST'])
+def verifier_fin_journee_route():
+    try:
+        verifier_absences_fin_journee()
+        return jsonify({"message": "Vérification des absences terminée"}), 200
+    except Exception as e:
+        logging.error(f"Erreur vérification fin journée : {e}")
+        return jsonify({"message": "Erreur serveur"}), 500
 
-    if check_date is None:
-        check_date = datetime.now()
+# ==========================
+# SCHEDULER
+# ==========================
+def verifier_toutes_les_verifications():
+    logging.info("Début des vérifications combinées")
+    verifier_depart_non_autorise_interne(datetime.now() - timedelta(days=1))
+    verifier_absences_fin_journee()
+    logging.info("Fin des vérifications combinées")
 
-    pointage_collection = db.pointage
-    notification_collection = db.notification
-
-    day_start = datetime(check_date.year, check_date.month, check_date.day)
-    day_end = datetime(check_date.year, check_date.month, check_date.day, 23, 59, 59)
-
-    pipeline = [
-        {"$match": {
-            "date_pointage": {"$gte": day_start, "$lt": day_end},
-            "statut": {"$in": ["depart", "depart_non_autorise"]}
-        }},
-        {"$sort": {"heure_pointage": -1}},
-        {"$group": {
-            "_id": "$user_id",
-            "dernier_pointage": {"$first": "$$ROOT"}
-        }}
-    ]
-
-    results = pointage_collection.aggregate(pipeline)
-
-    for entry in results:
-        pointage = entry["dernier_pointage"]
-        heure_depart = pointage.get("heure_depart") or pointage.get("heure_pointage")
-        if not heure_depart:
-            continue
-
-        heure_depart_time = heure_depart.time()
-        is_day = time(10, 30) <= heure_depart_time <= time(17, 30)
-        heure_limite = time(16, 0) if is_day else time(4, 0)
-
-        if heure_depart_time < heure_limite:
-            exists = notification_collection.find_one({
-                "user_id": pointage["user_id"],
-                "date": day_start,
-                "statut": "depart_non_autorise"
-            })
-            if exists:
-                continue
-
-            notification_doc = {
-                "user_id": pointage["user_id"],
-                "username": pointage["username"],
-                "date": day_start,
-                "heure": heure_depart,
-                "statut": "depart_non_autorise",
-                "message": f"Dernier départ non autorisé à {heure_depart.strftime('%H:%M:%S')}",
-                "role": pointage.get("role"),
-                "adresse": pointage.get("adresse", "")
-            }
-            notification_collection.insert_one(notification_doc)
-
-    logging.info(f"✅ Vérification des départs non autorisés pour {check_date.strftime('%Y-%m-%d')} terminée")
-
-# ⏰ Planificateur automatique à 12h31
 scheduler = BackgroundScheduler(timezone='Africa/Tunis')
 scheduler.add_job(
-    func=lambda: verifier_depart_non_autorise_interne(datetime.now() - timedelta(days=1)),
+    func=verifier_toutes_les_verifications,
     trigger='cron',
-    hour=6,
-    minute=00,
-    id='depart_non_autorise_job',
-    name='Vérification départ non autorisé 12h31',
+    hour=13,
+    minute=26,
+    id='verification_combinee_job',
+    name='Vérification départs non autorisés + absences',
     replace_existing=True
 )
 scheduler.start()
-logging.info("🗓️ Planificateur initialisé : vérification quotidienne à 12h31")
+logging.info("🗓️ Planificateur initialisé à 6h00")
 
 if __name__ == '__main__':
     app.run(debug=True, port=5010)
