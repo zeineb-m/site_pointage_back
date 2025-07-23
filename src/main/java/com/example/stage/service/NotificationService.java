@@ -18,4 +18,8 @@ public class NotificationService {
     public List<Notification> getAll() {
         return repository.findAll();
     }
+    public Notification getById(String id) {
+        return repository.findById(id).orElse(null);
+    }
+
 }

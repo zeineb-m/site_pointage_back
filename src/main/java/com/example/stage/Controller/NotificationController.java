@@ -22,4 +22,9 @@ public class NotificationController {
     public List<Notification> getAllNotifications() {
         return service.getAll();
     }
+    @GetMapping("/{id}")
+    public Notification getNotificationById(@PathVariable String id) {
+        return service.getById(id);
+    }
+
 }
