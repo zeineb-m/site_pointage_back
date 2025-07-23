@@ -7,6 +7,8 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.List;
 
 @Document(collection = "pointage")
 public class Pointage {
@@ -25,6 +27,24 @@ public class Pointage {
     private Localisation localisation;
 
     private String adresse;
+    private List<HeurePointage> arrivees;
+    private List<HeurePointage> departs;
+
+    public List<HeurePointage> getArrivees() {
+        return arrivees;
+    }
+
+    public void setArrivees(List<HeurePointage> arrivees) {
+        this.arrivees = arrivees;
+    }
+
+    public List<HeurePointage> getDeparts() {
+        return departs;
+    }
+
+    public void setDeparts(List<HeurePointage> departs) {
+        this.departs = departs;
+    }
 
     @Field("image")
     private Binary image;
@@ -75,5 +95,8 @@ public class Pointage {
 
         public double getLon() { return lon; }
         public void setLon(double lon) { this.lon = lon; }
+
     }
+
+
 }
