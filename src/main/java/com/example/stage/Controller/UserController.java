@@ -163,6 +163,7 @@ public class UserController {
 
             User userUpdates = objectMapper.readValue(userJson, User.class);
 
+            // Gérer la photo
             if (file != null && !file.isEmpty()) {
                 byte[] fileBytes = file.getBytes();
                 userUpdates.setPhoto(fileBytes);
@@ -170,6 +171,18 @@ public class UserController {
             } else {
                 userUpdates.setPhoto(existingUser.getPhoto());
                 userUpdates.setPhotoHash(existingUser.getPhotoHash());
+            }
+
+            // Gérer le mot de passe
+            if (userUpdates.getPassword() != null && !userUpdates.getPassword().isEmpty()) {
+                // Vérifie s’il est déjà crypté ou non (si différent du mot de passe stocké)
+                if (!passwordEncoder.matches(userUpdates.getPassword(), existingUser.getPassword())) {
+                    userUpdates.setPassword(passwordEncoder.encode(userUpdates.getPassword()));
+                } else {
+                    userUpdates.setPassword(existingUser.getPassword()); // inchangé
+                }
+            } else {
+                userUpdates.setPassword(existingUser.getPassword()); // inchangé
             }
 
             userUpdates.setId(id);
