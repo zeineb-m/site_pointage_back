@@ -15,12 +15,18 @@ pipeline {
             }
         }
     }
- stage('Compile') {
+ stage('2. ⚙️ Build avec Maven') {
             steps {
-                sh 'mvn clean compile'
+                sh 'mvn clean install'
             }
         }
 
+        stage('3. ✅ Tests unitaires') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+}
     post {
         success {
             echo '🎉 Build succeeded!'
