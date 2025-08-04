@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     tools {
-        
         jdk 'JAVA_HOME'
         maven 'M2_HOME'
     }
@@ -10,12 +9,11 @@ pipeline {
     stages {
         stage('1. 🧬 Clone Repository') {
             steps {
-              
                 git branch: 'main', url: 'https://github.com/zeineb-m/site_pointage_back.git'
             }
         }
-    }
- stage('2. ⚙️ Build avec Maven') {
+
+        stage('2. ⚙️ Build avec Maven') {
             steps {
                 sh 'mvn clean install'
             }
@@ -26,7 +24,8 @@ pipeline {
                 sh 'mvn test'
             }
         }
-}
+    }
+
     post {
         success {
             echo '🎉 Build succeeded!'
@@ -36,4 +35,5 @@ pipeline {
         }
     }
 }
+
 
