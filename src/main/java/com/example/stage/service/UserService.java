@@ -1,4 +1,5 @@
 package com.example.stage.service;
+import com.example.stage.Model.Role;
 import com.example.stage.Model.User;
 
 import java.util.List;
@@ -11,5 +12,9 @@ public interface UserService {
     User updateUser(User user);
     User getUserByEmail(String email);
     User authenticate(String email, String password);
+    public long countSiteSupervisors() ;
+    public long countUsersByRole(Role role);
+    List<User> getUsersByRole(Role role);
 
+    User findById(String senderId);
 }

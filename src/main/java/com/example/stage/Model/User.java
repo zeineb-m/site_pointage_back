@@ -19,6 +19,12 @@ public class User {
     private String phone;
     private String address;
     private String resetCode;
+
+    private String statut; // en camelCase
+
+    public String getStatut() { return statut; }
+    public void setStatut(String statut) { this.statut = statut; }
+
     public String getResetCode() { return resetCode; }
     public void setResetCode(String resetCode) { this.resetCode = resetCode; }
 

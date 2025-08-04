@@ -1,6 +1,7 @@
 package com.example.stage.service;
 
 
+import com.example.stage.Model.Role;
 import com.example.stage.Model.User;
 import com.example.stage.Repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -61,5 +62,23 @@ public class UserServiceImpl implements UserService {
     public User getUserByEmail(String email) {
         return repo.findByEmail(email);
     }
+    public long countSiteSupervisors() {
+
+        return repo.countByRole(Role.SITE_SUPERVISOR);
+    }
+
+    public long countUsersByRole(Role role) {
+        return repo.countByRole(role);
+    }
+
+    @Override
+    public User findById(String id) {
+        return repo.findById(id).orElse(null);
+    }
+    @Override
+    public List<User> getUsersByRole(Role role) {
+        return repo.findByRole(role.name());  // Convertit l'enum Role en String
+    }
+
 
 }

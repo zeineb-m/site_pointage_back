@@ -10,9 +10,11 @@ import java.util.List;
 public class NotificationService {
 
     private final NotificationRepository repository;
+    private final NotificationRepository notificationRepository;
 
-    public NotificationService(NotificationRepository repository) {
+    public NotificationService(NotificationRepository repository, NotificationRepository notificationRepository) {
         this.repository = repository;
+        this.notificationRepository = notificationRepository;
     }
 
     public List<Notification> getAll() {
@@ -20,6 +22,27 @@ public class NotificationService {
     }
     public Notification getById(String id) {
         return repository.findById(id).orElse(null);
+    }
+    public Notification updateNotification(String id, Notification updatedNotif) {
+        Notification notif = repository.findById(id).orElseThrow();
+        notif.setStatut(updatedNotif.getStatut());
+        notif.setIsRead(updatedNotif.isRead());
+
+        return repository.save(notif);
+    }
+
+    public List<Notification> getUnreadByRole(String role) {
+        if ("HR".equalsIgnoreCase(role)) {
+            // HR voit toutes les notifications non lues
+            return notificationRepository.findByIsReadFalse();
+        }
+        // sinon, on filtre par rôle exact
+        return notificationRepository.findByRoleAndIsReadFalse(role);
+    }
+
+
+    public Notification save(Notification notification) {
+        return notificationRepository.save(notification);
     }
 
 }

@@ -19,6 +19,9 @@ public class SecurityConfig {
                         .requestMatchers("/users/**").permitAll()
                         .requestMatchers("/pointages/**").permitAll()
                         .requestMatchers("/notifications/**").permitAll()
+                        .requestMatchers("/api/dashboard/**").permitAll()
+                        .requestMatchers("/messages/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(Customizer.withDefaults());

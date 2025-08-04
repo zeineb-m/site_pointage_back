@@ -27,4 +27,16 @@ public class NotificationController {
         return service.getById(id);
     }
 
+    @GetMapping("/unread/{role}")
+    public List<Notification> getUnreadNotificationsByRole(@PathVariable String role) {
+        return service.getUnreadByRole(role);
+    }
+
+    @PutMapping("/{id}/mark-as-read")
+    public Notification markAsRead(@PathVariable String id) {
+        Notification notif = service.getById(id);
+        notif.setIsRead(true);
+        return service.save(notif);
+    }
+
 }

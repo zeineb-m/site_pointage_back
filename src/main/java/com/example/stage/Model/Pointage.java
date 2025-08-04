@@ -19,7 +19,12 @@ public class Pointage {
     private String user_id;
     private String username;
 
-    private LocalDate date_pointage;
+    @Field("date_pointage")
+    private LocalDate datePointage;
+
+    public LocalDate getDatePointage() { return datePointage; }
+    public void setDatePointage(LocalDate datePointage) { this.datePointage = datePointage; }
+
     private LocalDateTime heure_pointage;
 
     private String statut;
@@ -63,8 +68,8 @@ public class Pointage {
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
 
-    public LocalDate getDate_pointage() { return date_pointage; }
-    public void setDate_pointage(LocalDate date_pointage) { this.date_pointage = date_pointage; }
+//    public LocalDate getDate_pointage() { return date_pointage; }
+//    public void setDate_pointage(LocalDate date_pointage) { this.date_pointage = date_pointage; }
 
     public LocalDateTime getHeure_pointage() { return heure_pointage; }
     public void setHeure_pointage(LocalDateTime heure_pointage) { this.heure_pointage = heure_pointage; }

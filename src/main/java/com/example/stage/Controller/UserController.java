@@ -2,6 +2,7 @@ package com.example.stage.Controller;
 
 import com.example.stage.Model.Role;
 import com.example.stage.Model.User;
+import com.example.stage.Repository.UserRepository;
 import com.example.stage.service.EmailService;
 import com.example.stage.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,6 +33,8 @@ public class UserController {
     private RestTemplate restTemplate;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private UserRepository userRepository;
 
     @Autowired
     public UserController(UserService userService) {
@@ -293,5 +296,35 @@ public class UserController {
 
         return ResponseEntity.ok(Collections.singletonMap("message", "Mot de passe réinitialisé avec succès"));
     }
+    @GetMapping("/count/site-supervisors")
+    public ResponseEntity<Map<String, Long>> countSiteSupervisors() {
+        long count = userService.countSiteSupervisors();
+        Map<String, Long> response = Collections.singletonMap("countSiteSupervisors", count);
+        return ResponseEntity.ok(response);
+    }
 
+    @GetMapping("/count/by-role")
+    public ResponseEntity<Map<String, Long>> countUsersByRole() {
+        Map<String, Long> counts = new HashMap<>();
+        for (Role role : Role.values()) {
+            long count = userService.countUsersByRole(role);
+            counts.put(role.name(), count);
+        }
+        return ResponseEntity.ok(counts);
+    }
+
+
+    @GetMapping("/role")
+    public List<User> getUsersByRole(@RequestParam String role) {
+
+        Role userRole;
+        try {
+            userRole = Role.valueOf(role);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Role invalide: " + role);
+        }
+
+
+        return userService.getUsersByRole(userRole);
+    }
 }

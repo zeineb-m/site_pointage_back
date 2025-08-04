@@ -19,6 +19,17 @@ public class Notification {
     private String role;
     private String adresse;
 
+    public boolean isRead() {
+        return isRead;
+    }
+
+    public void setIsRead(boolean isRead) {
+        this.isRead = isRead;
+    }
+
+
+    private boolean isRead = false;
+
     public Notification() {}
 
     public Notification(String userId, String username, LocalDateTime date, LocalDateTime heure,
