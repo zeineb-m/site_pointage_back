@@ -29,4 +29,11 @@ pipeline {
             }
         }
     }
+    stage('Check Files') {
+    steps {
+        sh 'ls -lah'
+        sh 'find . -name "pom.xml"'
+    }
+}
+
 }
