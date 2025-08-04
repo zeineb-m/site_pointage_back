@@ -22,13 +22,13 @@ pipeline {
     stages {
         stage('1. Clone Repository') {
             steps {
-                git branch: 'main', url: 'https://github.com/zeineb-m/zeinebmaatalli-4twin1.git'
+                git branch: 'main', url: 'https://github.com/zeineb-m/site_pointage_back.git'
             }
         }
 
         stage('2. Check Maven Version') {
             steps {
-                dir('zeinebmaatalli-4TWIN1-G6') {
+                dir('zeinebmaatalli') {
                     sh 'mvn -version'
                 }
             }
@@ -36,7 +36,7 @@ pipeline {
 
         stage('3. Compile Project') {
             steps {
-                dir('zeinebmaatalli-4TWIN1-G6') {
+                dir('zeinebmaatalli') {
                     sh 'mvn clean compile'
                 }
             }
@@ -44,7 +44,7 @@ pipeline {
 
 //         stage('4. Run Tests') {
 //             steps {
-//                 dir('zeinebmaatalli-4TWIN1-G6') {
+//                 dir('zeinebmaatalli') {
 //                     sh 'mvn test'
 //                 }
 //             }
