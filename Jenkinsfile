@@ -28,12 +28,13 @@ pipeline {
                 sh 'mvn clean compile'
             }
         }
-    }
-    stage('Check Files') {
+          stage('Check Files') {
     steps {
         sh 'ls -lah'
         sh 'find . -name "pom.xml"'
     }
 }
 
+    }
+  
 }
