@@ -15,36 +15,7 @@ pipeline {
             }
         }
 
-        stage('2. 🧪 Check Maven Version') {
-            steps {
-                sh 'mvn -v'
-            }
-        }
-
-        stage('3. ⚙️ Compile Project') {
-            steps {
-                sh 'mvn clean compile'
-            }
-        }
-
-        stage('4. ✅ Run Tests') {
-            steps {
-                sh 'mvn test'
-            }
-        }
-
-        stage('5. 📦 Package Application') {
-            steps {
-                sh 'mvn package'
-            }
-        }
-
-        stage('6. 📤 Archive JAR') {
-            steps {
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-            }
-        }
-    }
+     
 
     post {
         success {
