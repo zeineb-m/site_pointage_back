@@ -24,19 +24,20 @@ pipeline {
                 sh 'mvn test'
             }
         }
-    }
 
-     stage('Package JAR') {
+        stage('4. 📦 Package JAR') {
             steps {
                 sh 'mvn package -DskipTests'
             }
         }
 
-        stage('MVN SONARQUBE') {
+        stage('5. 🔍 MVN SONARQUBE') {
             steps {
                 sh "mvn sonar:sonar -Dsonar.login=5c3dfe9177dcc6c925adb6e26f91c4b0506d9ccd -Dmaven.test.skip=true"
             }
         }
+    }
+
     post {
         success {
             echo '🎉 Build succeeded!'
