@@ -7,29 +7,33 @@ pipeline {
     }
 
     stages {
-        stage('1.  Clone Repository') {
+        stage('1. Clone Repository') {
             steps {
                 git branch: 'main', url: 'https://github.com/zeineb-m/site_pointage_back.git'
             }
         }
 
-        stage('2.  Build avec Maven') {
+        stage('2. Build avec Maven') {
             steps {
                 sh 'mvn clean install'
             }
         }
 
-       
-
-        stage('4.  Package JAR') {
+        stage('3. Package JAR') {
             steps {
                 sh 'mvn package -DskipTests'
             }
         }
 
-        stage('5.  MVN SONARQUBE') {
+        stage('4. Run Tests') {
             steps {
-                sh "mvn sonar:sonar -Dsonar.login=5c3dfe9177dcc6c925adb6e26f91c4b0506d9ccd -Dmaven.test.skip=true"
+                sh 'mvn test'
+            }
+        }
+
+        stage('5. Analyse SonarQube') {
+            steps {
+                sh 'mvn sonar:sonar -Dsonar.login=5c3dfe9177dcc6c925adb6e26f91c4b0506d9ccd -Dsonar.projectKey=site_pointage_back -Dsonar.host.url=http://localhost:9000'
             }
         }
     }
@@ -43,5 +47,3 @@ pipeline {
         }
     }
 }
-
-
