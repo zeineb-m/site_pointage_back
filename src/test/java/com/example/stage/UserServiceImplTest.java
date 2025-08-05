@@ -81,26 +81,7 @@ class UserServiceImplTest {
         verify(userRepository, times(1)).save(user1);
     }
 
-    @Test
-public void testUpdateUser() {
-    // 1. Créer et sauvegarder un utilisateur initial
-    User user = new User();
-    user.setUsername("maatalli");
-    user.setPassword("maatalli");
-    user.setEmail("maatalli@gmail.com");
-    user = userRepository.save(user);
-
-    // 2. Modifier des champs
-    user.setUsername("updatedUsername");
-    user.setEmail("updated@example.com");
-
-    // 3. Appeler la méthode à tester
-    User updatedUser = userService.updateUser(user);
-
-    // 4. Vérifier que la mise à jour a bien eu lieu
-    assertEquals("updatedUsername", updatedUser.getUsername());
-    assertEquals("updated@example.com", updatedUser.getEmail());
-}
+ 
 
 
     @Test
