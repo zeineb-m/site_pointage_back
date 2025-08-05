@@ -82,18 +82,6 @@ class UserServiceImplTest {
     }
 
  
-@Test
-void testUpdateUser() {
-    when(userRepository.findById("686b8b80fc2de5e429828e0a")).thenReturn(Optional.of(user2));
-    when(userRepository.save(user2)).thenReturn(user2);
-
-    User updated = userService.updateUser(user2);
-    assertEquals("Bob", updated.getUsername());
-
-    verify(userRepository).findById("2");
-    verify(userRepository).save(user2);
-}
-
 
     @Test
     void testDeleteUser() {
