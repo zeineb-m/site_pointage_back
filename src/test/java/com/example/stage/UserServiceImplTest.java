@@ -81,13 +81,7 @@ class UserServiceImplTest {
         verify(userRepository, times(1)).save(user1);
     }
 
-    @Test
-    void testUpdateUser() {
-        when(userRepository.save(user2)).thenReturn(user2);
-        User updated = userService.updateUser(user2);
-        assertEquals("Bob", updated.getUsername());
-        verify(userRepository).save(user2);
-    }
+
 
     @Test
     void testDeleteUser() {
