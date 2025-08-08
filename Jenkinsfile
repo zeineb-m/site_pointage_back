@@ -58,15 +58,16 @@ pipeline {
             }
         }
 
-        stage('8. Restart Services with Docker Compose') {
-            steps {
-                sh '''
-                    docker-compose down || true
-                    docker-compose up -d --build
-                '''
-            }
+       stage('8. Restart Services with Docker Compose') {
+    steps {
+        dir("${WORKSPACE}") {
+            sh '''
+                docker compose down || true
+                docker compose up -d --build
+            '''
         }
     }
+}
 
     post {
         success {
