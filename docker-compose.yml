@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:5.0
+    container_name: mongo_stage
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: stage
+      MONGO_INITDB_ROOT_USERNAME: stage
+      MONGO_INITDB_ROOT_PASSWORD: stage
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  app:
+    image: site_pointage_back:latest    # Ton image Spring Boot (tu la crées toi-même)
+    container_name: app_stage
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://stage:stage@mongo:27017/stage?authSource=admin
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:

@@ -36,7 +36,11 @@ pipeline {
           sh 'mvn sonar:sonar -Dsonar.login=e5aa2062191baf81e375649795ee4b8c0351ecb9 -Dsonar.projectKey=site_pointage_back -Dsonar.host.url=http://localhost:9000'
          }
       }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> 3c56db7 (add docker compose+dockerfile)
    stage('6. Deploy to Nexus') {
             steps {
 
