@@ -60,7 +60,7 @@ class MessageServiceImplTest {
         Message m1 = new Message(
                 "1",
                 user1Id, "User1", "HR",
-                user2Id, "User2", "SUPERVISEUR",
+                user2Id, "User2", "SITE_SUPERVISOR",
                 "Salut",
                 new Date(),
                 false
@@ -68,7 +68,7 @@ class MessageServiceImplTest {
 
         Message m2 = new Message(
                 "2",
-                user2Id, "User2", "SUPERVISEUR",
+                user2Id, "User2", "SITE_SUPERVISOR",
                 user1Id, "User1", "HR",
                 "Bonjour",
                 new Date(),
@@ -97,10 +97,10 @@ class MessageServiceImplTest {
         assertEquals("User1", result.get(0).getSenderUsername());
         assertEquals("HR", result.get(0).getSenderRole());
         assertEquals("User2", result.get(0).getReceiverUsername());
-        assertEquals("SUPERVISEUR", result.get(0).getReceiverRole());
+        assertEquals("SITE_SUPERVISOR", result.get(0).getReceiverRole());
 
         assertEquals("User2", result.get(1).getSenderUsername());
-        assertEquals("SUPERVISEUR", result.get(1).getSenderRole());
+        assertEquals("SITE_SUPERVISOR", result.get(1).getSenderRole());
         assertEquals("User1", result.get(1).getReceiverUsername());
         assertEquals("HR", result.get(1).getReceiverRole());
 
@@ -115,7 +115,7 @@ class MessageServiceImplTest {
         Message m1 = new Message(
                 "1",
                 "u1", "Sender", "HR",
-                receiverId, "Receiver", "SUPERVISEUR",
+                receiverId, "Receiver", "SITE_SUPERVISOR",
                 "Hello",
                 new Date(),
                 false
@@ -144,7 +144,7 @@ class MessageServiceImplTest {
         assertEquals("Sender", dto.getSenderUsername());
         assertEquals("HR", dto.getSenderRole());
         assertEquals("Receiver", dto.getReceiverUsername());
-        assertEquals("SUPERVISEUR", dto.getReceiverRole());
+        assertEquals("SITE_SUPERVISOR", dto.getReceiverRole());
         assertEquals("Hello", dto.getContent());
 
         verify(messageRepository, times(1)).findByReceiverIdOrderByTimestampAsc(receiverId);
