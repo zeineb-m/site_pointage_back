@@ -7,7 +7,7 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = 'zeinebmaatalli/stage'
+        IMAGE_NAME = 'zeinebmaatalli/pointage'
         DOCKER_USERNAME = 'zeinebmaatalli'
         DOCKER_PASSWORD = 'Zeineb123'
     }
