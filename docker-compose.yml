@@ -15,7 +15,7 @@ services:
       - mongo_data:/data/db
 
   app:
-    image: zeinebmaatalli/stage   
+    image: zeinebmaatalli/pointage   
     container_name: app_stage
     restart: always
     ports:
